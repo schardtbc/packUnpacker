@@ -10,7 +10,7 @@ encode.default <- function(obj) {
   cat("This is a generic function\n")
 }
 
-encode.default <- function(obj) {
+decode.default <- function(obj) {
   cat("This is a generic function\n")
 }
 
