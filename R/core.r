@@ -1,8 +1,8 @@
-decode <- function(obj,buffer,offset){
+decode <- function(obj,rbs){
   UseMethod("decode")
 }
 
-encode <- function(obj,buffer,offset,...){
+encode <- function(obj,rbs,...){
   UseMethod("encode")
 }
 
@@ -60,13 +60,9 @@ SignedCodec <- function (len,offset_binary=FALSE){
   return (self)
 }
 
-decode.UnsignedCodec <- function(self,dor){
-  o = dor[[2]]
-  v = as.numeric(dor[[1]][(o+1):(o+self$l)]) %*% self$m
-  o=o+self$l
-  dor[[2]]<-o
-  dor[3]<- c(dor[[3]],v)
-  return (dor)
+decode.UnsignedCodec <- function(self,rbs){
+  v = as.numeric(rbs$read(self.l)) %*% self$m
+  return (v)
 }
 
 permute_to_array.UnsignedCodec <- function (self,n){
@@ -83,23 +79,19 @@ permute_to_constant.UnsignedCodec <- function(self){
   return (obj)
 }
 
-decode.SignedCodec <- function(self,dor){
-  o = dor[[2]]
-  v = as.numeric(dor[[1]][(o+1):(o+self$l)]) %*% self$m
+decode.SignedCodec <- function(self,rbs){
+  v = as.numeric(rbs$read(self$l)) %*% self$m
   if (v>self$comp){
     v <- v-self$sub
   }
-  o=o+self$l
-  dor[[2]]<-o
-  dor[3]<- c(dor[[3]],v)
-  return (dor)
+  return (v)
 }
 
 permute_to_array.SignedCodec <- function(self,n){
   obj <- SignedArrayCodec(self.len,n)
   return (obj)
 }
-permute_to_onstant.SignedCodec <- function(self){
+permute_to_constant.SignedCodec <- function(self){
   obj <- SignedConstantCodec(self.len,0)
 } 
 
@@ -108,14 +100,12 @@ RelativePositioner <- function(obj,n){
   return (obj)
 }
 
-decode.RelativePostioner <- function(self,dor){
-  dor[[2]] <- dor[[2]] + self$N
-  return (dor)
+decode.RelativePostioner <- function(self,rbs){
+  rbs$move(self$N)
 }
 
-encode.RelativePostioner <- function(self,dor){
-  dor[[2]] <- dor[[2]] + self$N
-  return (dor)
+encode.RelativePostioner <- function(self,rbs){
+  rbs$move(self$N)
 }
 
 permute_to_array.RelativePositioner <- function(self,n){
@@ -128,14 +118,12 @@ AbsolutePositioner <- function(obj,n){
   return (obj)
 }
 
-decode.AbsolutePostioner <- function(self,dor){
-  dor[[2]] <- self$N
-  return (dor)
+decode.AbsolutePostioner <- function(self,rbs){
+  rbs$seek(self$N)
 }
 
-encode.AbsolutePostioner <- function(self,dor){
-  dor[[2]] <- self$N
-  return (dor)
+encode.AbsolutePostioner <- function(self,rbs){
+  rbs$seek(self$N)
 }
 
 permute_to_array.AbsolutePositioner <- function(self,n){
@@ -148,12 +136,9 @@ CharCodec <- function(){
   return (obj)
 }
 
-decode.CharCodec <- function(self,dor){
-  o <- dor[[2]]
-  v <- rawToChar(dor[[1]][[o+1]])
-  dor[[2]] <- o+self$l
-  dor[3] <- c(dor[[3]],v)
-  return (dor)
+decode.CharCodec <- function(self,rbs){
+  v <- rawToChar(rbs$read(self.l))
+  return (v)
 }
 
 permute_to_array.CharCodec <- function(self,n){
@@ -165,9 +150,49 @@ StringCodec <- function(n){
   obj <- list(N = n,scaler=FALSE, encodes=TRUE)
 }
 
-decode.StringCodec <- function(self,dor){
-  
-  return (dor)
+decode.StringCodec <- function(self,rbs){
+  v <- rawToChar(rbs$read(self.l))
+  return (v)
+}
+
+RandomDataGenerator <- function(n){
+  obj <- list(N = n, codec = UnsignedCodec(1),scaler=TRUE,encodes = TRUE)
+  if (n>1){
+    obj$codec <- UnsignedArrayCodec(1,n)
+    obj$scaler <- FALSE
+  }
+  class(obj) <- "RandomDataGenerator"
+}
+
+decode.RandomDataGenerator <- function(self,rbs){
+  v = floor(255*rand(self.N))
+  return (v)
+}
+
+permute_to_array.RandomDataGenerator <- function(self,n){
+  obj <- RandomDataGenerator(n)
+  return (obj)
+}
+
+IndexDecorator <- function(v){
+   obj <- list(scaler = TRUE, encodes <- TRUE, N=0, l=0,value = v)
+   class(obj) <- "IndexDecorator"
+}
+
+decode.IndexDecorator <- function(self,rbs){
+   v = self$value
+   self$value<-value+1
+   return (v)
+}
+
+ValueDecorator <- function(v){
+  obj <- list(scaler = TRUE, encodes <- TRUE, N=0, l=0,value = v)
+  class(obj) <- "ValueDecorator"
+}
+
+decode.ValueDecorator <- function(self,rbs){
+  v = self$value
+  return (v)
 }
 
 AtomicCodec <- list(
@@ -198,5 +223,96 @@ AtomicCodec <- list(
 ,V = ValueDecorator(0)
 ,R = RandomDataGenerator(1)
 )
-testbuf <-as.raw(0:255)
-testdor <- list(testbuf,0,list())
+
+UnsignedArrayCodec <- function(len,N){
+  obj <- list(
+    l = len
+    ,N = N
+    ,lR = N*len
+    ,multiplier = (256.^(0:len-1))
+    ,divider = 256.^(1:len)
+    ,scaler = FALSE
+    ,encodes = TRUE
+  )
+  class(obj) <- "UnsignedArrayCodec"
+  return (obj)
+}
+
+decode.UnsignedArrayCodec <- function(self,rbs){
+  v = as.numeric(rbs$read(self.lR))
+  v = matrix(v,self.len,self.N)
+  v = v %*% self.Multiplier;
+  rbs$move(self.lR)
+  return (v)
+}
+
+SignedArrayCodec <- function(len,N){
+  obj <- list(
+    l = len
+    ,N = N
+    ,lR = N*len
+    ,multiplier = (256.^(0:len-1))
+    ,divider = 256.^(1:len)
+    ,comp = 2^(8*self.l-1)
+    ,sub = 2^(8*self.l)
+    ,scaler = FALSE
+    ,encodes = TRUE
+  )
+  class(obj) <- "SignedArrayCodec"
+  return (obj)
+}
+
+decode.SignedArrayCodec <- function(self,rbs){
+  v = as.numeric(rbs$read(self.lR))
+  v = matrix(v,self.len,self.N)
+  v = v %*% self.Multiplier
+  np <-  v>=self.Comp;
+  if (any(np)){
+     v[np]=v[np] - self.sub
+  }
+  rbs$move(self.lR)
+  return (v)
+}
+
+RecordCodec <- function(Codec,n){
+  obj = list(
+    N = n
+    ,fmt = NA
+    ,codec = Codec
+    ,uniform = FALSE
+    ,scaler = FALSE
+    ,encodes = TRUE
+  )
+  class(obj) <- "RecordCodec"
+}
+
+decode.RecordCodec <- function(self,rbs){
+  for (ri in 1:self.N){
+    cnt<-0
+    for (ci in 1:length(self$codec)){
+      r <- decode(self$codec[ci],rbs)
+      if (isempty(r)) next
+      if (cnt==0){
+        cnt<-cnt+1
+        r=list(t)
+      }
+      else{
+        cnt<-cnt+1
+        r=c(r,t)
+      }
+    }
+    if (ri==1){
+      v=r
+    }
+    else{
+      v[ri,]=r
+    }
+  }
+  return (v)
+}
+  
+purmute_to_array.RecordCodec <- function(self,n){
+  self$N = n
+  return (self)
+}
+  
