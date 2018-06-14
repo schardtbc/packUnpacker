@@ -315,7 +315,217 @@ purmute_to_array.RecordCodec <- function(self,n){
   self$N = n
   return (self)
 }
-  
+
+BufferCodec <- function(fmt){
+  obj <- list(
+    codecs <- NA
+    ,uniform = FALSE
+  )
+  if (ischar(fmt))
+    obj$codecs <- BufferCodec.Factory(fmt)
+  else
+    obj$codecs <- fmt
+  obj$uniform <- all(lapply(obj$codecs,function(x) x$scaler));
+  class(obj)<-"BufferCodec"
+  return (obj)
+}
+
+decode.BufferCodec <- function(self,rbs){
+  if (self$unform){
+    cnt<-0
+    for (codec in self$codecs){
+      t <- decode(codec,rbs)
+      if (is.NA(t) || is.null(t) || length(t)==0){
+        next
+      }
+      if (cnt ==0){
+        cnt<-cnt+1
+        v <-t
+      }
+      else {
+        cnt<-cnt+1
+        v[cnt]<-t
+      }
+    }
+  }
+  else{
+    cnt<-0
+    for (codec in self$codecs){
+      t <- decode(codec,rbs)
+      if (is.NA(t) || is.null(t) || length(t)==0){
+        next
+      }
+      if (cnt==0){
+        cnt <-cnt+1
+        v <- list(t)
+      }
+      else {
+        cnt<-cnt+1
+        v[cnt]<-t
+      }
+    }
+  }
+  if (is.list(v) && length(a)==1)
+    v <- v[[1]]
+}
+ 
+BufferCodec.Factory <- function(fmt){
+  offsetbinary <- FALSE
+  codecs <- list()
+  nac <- names(AtomicCodecs)
+  digits = "0123456789"
+  digits = strsplit(digits,split="")[[1]]
+  cnt<-0
+  ci<-1
+  cv <- strsplit(fmt,split="")[[1]]
+  while (ci<length(cv)){
+    c <- cv[ci]
+    if (c=="K"){
+      offsetbinary <- TRUE
+      ci<-ci+1
+    } 
+    else if (c == 'k') {
+      offsetbinary <- FALSE
+      ci<-ci+1
+    }
+    else if (c == '('){
+      lp <- cv[ci:length(cv)]=="("
+      rp <- cv[ci:length(cv)]==")"
+      mp <- cumsum(lp-rp)
+      imp <- purrr::detect_index(mp,function(x) x==0)
+      rfmt <- cv[(ci+1):(ci+imp-2)]
+      rfmt <- paste(rfmt,collapse="")
+      rcodecs <- BufferCodec.Factory(rfmt)
+      cnt<-cnt+1
+      codecs[[cnt]]<-RecordCodec(rcodecs,1)
+      ci <- ci + imp
+    }
+    else if (any(nac == c)){
+      cnt<-cnt+1
+      codecs[[cnt]] <- AtomicCodec[[c]]
+      ci<-ci+1     
+    }
+    else if (any(digit == c))
+      
+  }
+}
+
+# function codecs = Factory(str)
+# % Static Factory Method Compiles Format String into an cell array of format descriptors for later use.
+# digits =  {'0' '1' '2' '3' '4' '5' '6' '7' '8' '9' '+' '-'};
+# %#function AtomicCodec
+# halswitch('-PUP_OFFSETBINARY');            
+# [m,s]=enumeration('AtomicCodec');
+
+# p  = find(str(ci+2:end)==mc,1,'first');
+# fielddesc = str(ci+1:ci+p+1);
+# fielddesc = eval(fielddesc);
+# if codecs{cnt}.Scaler
+# if any(fielddesc<0)
+# if codecs{cnt}.len == 8
+# fc=uint64SignedBitFieldCodec(codecs{cnt},fielddesc);
+# else
+#   fc = SignedBitFieldCodec(codecs{cnt},fielddesc,offsetbinary);
+# end
+# else
+#   if codecs{cnt}.len == 8 
+# fc=uint64BitFieldCodec(codecs{cnt},fielddesc);
+# else
+#   fc = BitFieldCodec(codecs{cnt},fielddesc);
+# end
+# end
+# nfields = length(fielddesc);
+# for ii=0:nfields-1
+# codecs{cnt+ii}=fc;
+# end
+# cnt=cnt+nfields-1;
+# else
+#   if mc==']'
+# if any(fielddesc<0)
+# if codecs{cnt}.len==8
+# codecs{cnt} = int64BitFieldArrayCodec(codecs{cnt},fielddesc,offsetbinary);
+# else
+#   codecs{cnt} = SignedBitFieldArrayCodec(codecs{cnt},fielddesc,offsetbinary);
+# end
+# else
+#   if codecs{cnt}.len==8
+# codecs{cnt} = uint64BitFieldArrayCodec(codecs{cnt},fielddesc);
+# else
+#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc); 
+# end
+# end
+# else
+#   if  any(cellfun(@(x) any(x<0),fielddesc))
+# codecs{cnt} = SignedBitFieldMatrixCodec(codecs{cnt},fielddesc);
+# else
+#   codecs{cnt} = BitFieldMatrixCodec(codecs{cnt},fielddesc);
+# end
+# end
+# end
+# ci=ci+p+2;
+# case '['
+# p  = find(str(ci+1:end)==']',1,'first');
+# classname = str(ci+1:ci+p-1);
+# cnt=cnt+1;
+# codecs{cnt} = ClassCodec(classname,1);
+# ci=ci+p;
+# case '('
+# p  = (str(ci:end)=='(') - (str(ci:end)==')');
+# if sum(p)~=0
+# error('BufferCodec.Factory, format string, %s, has unbalanced parentheses',str);
+# end
+# fp = find(p~=0);
+# sp = fp;
+# for pi=2:length(fp); sp(pi)=sp(pi-1)+p(fp(pi)); end;
+# lp = fp(find(sp==0,1,'first'));    
+# rfmt = BufferCodec.Factory(str(ci+1:ci+lp-2));
+# isUniform = all(cellfun(@(x) x.Scaler,rfmt));
+# cnt=cnt+1;
+# if isUniform
+# codecs{cnt}=UniformRecordCodec(rfmt,1);
+# else
+#   codecs{cnt}=RecordCodec(rfmt,1);
+# end
+# ci=ci+lp;
+# case s
+# cnt=cnt+1;
+# codecs{cnt} = AtomicCodec.(str(ci)).codec;
+# ci=ci+1;
+# case digits
+# cstr = cellfun(@(x) {char(x)},(num2cell(int8(str(ci:end)))));
+# nums = ismember(cstr,digits);
+# nums = [nums 0];
+# ld = find(nums==0,1,'first')-1;
+# recn = str2num(str(ci:ci+ld-1));
+# if isa(codecs{cnt},'UniformRecordCodec')
+# codecs{cnt} = codecs{cnt}.Optimize();
+# end
+# codecs{cnt} = codecs{cnt}.PermuteToArray(recn);
+# ci=ci+ld;
+# case '>' %forward link
+# name = str(ci+1);
+# codecs{cnt} = codecs{cnt}.PermuteToForwardReference();
+# forwardLinks.(name) = codecs{cnt};
+# ci=ci+2;
+# case '<' %consume forward link
+# name = str(ci+1);
+# hSource = forwardLinks.(name);
+# if isa(codecs{cnt},'UniformRecordCodec')
+# codecs{cnt} = codecs{cnt}.Optimize();
+# end                         
+# codecs{cnt} = codecs{cnt}.PermuteToArray(1);
+# hTarget=codecs{cnt};
+# addlistener(hSource,'DataParsed',@hTarget.ProcessForwardReference);
+# ci=ci+2;
+# case ':'
+# codecs{cnt} = codecs{cnt}.PermuteToConstant();
+# ci=ci+1;
+# otherwise
+# ci=ci+1;
+# end
+# end
+# end
+
 # classdef BufferCodec < handle
 # %BufferCodec Used to Code/Decode (Pack/Unpack) byte buffers
 # %   Detailed explanation goes here
@@ -556,7 +766,7 @@ purmute_to_array.RecordCodec <- function(self,n){
 # mc='}';
 # end
 # p  = find(str(ci+2:end)==mc,1,'first');
-# fielddesc = str(ci+1:ci+p+1);
+# fielddesc = str(ci+2:ci+p+1);
 # fielddesc = eval(fielddesc);
 # if codecs{cnt}.Scaler
 # if any(fielddesc<0)
