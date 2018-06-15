@@ -1,3 +1,16 @@
+# PackUnpackR/core.R
+#
+# Author: Bruce C. Schardt
+#  email: bruce.schardt@gmail.com
+#
+# git clone https://github.com/bruce-schardt/PackUnpackR.git
+# copyright 2018
+
+# PackUnpackR
+# R package to Unpack(parse) a binary file based on a file format definition
+# example format:  format = 'x8Sx38LL>nLL>aLLLBBBBBccc8c8c8c8c8c8c20bbo<a[OptiRecordv1]<n'
+
+
 decode <- function(obj,rbs){
   UseMethod("decode")
 }
@@ -12,6 +25,10 @@ permute_to_array<- function(obj,n){
 
 permute_to_forward_reference<- function(obj){
   UseMethod("permute_to_forward_reference")
+}
+
+add_reference <- function(obj){
+  UseMethod("add_reference")
 }
 
 permute_to_constant <- function(self){
@@ -32,6 +49,10 @@ permute_to_array.default <- function(obj,n){
 
 permute_to_forward_reference.default <- function(obj){
   cat("This is a generic function\n")
+}
+
+add_reference.default <- function(ob){
+  cat("this is a generic function")
 }
 
 permute_to_constant.default <- function(self){
@@ -69,9 +90,14 @@ permute_to_array.UnsignedCodec <- function (self,n){
   obj <- UnSignedArrayCodec(self$l,n)
   return (obj)
 }
-permute_to_forward_reference.UnsignedCodec <- function(self){
-  obj <- UnsignedForwardReferenceCodec(self$l)
+permute_to_forward_reference.UnsignedCodec <- function(self,cvalue){
+  obj <- UnsignedForwardReferenceCodec(self$l,cvalue)
   return (obj)
+}
+
+add_reference.UnsignedCodec <- function(self,cvalue){
+  self$capturedValue <-cvalue
+  return (self)
 }
 
 permute_to_constant.UnsignedCodec <- function(self){
@@ -90,6 +116,16 @@ decode.SignedCodec <- function(self,rbs){
 permute_to_array.SignedCodec <- function(self,n){
   obj <- SignedArrayCodec(self.len,n)
   return (obj)
+}
+
+permute_to_forward_reference.SignedCodec <- function(self,cvalue){
+  obj <- SignedForwardReferenceCodec(self$l,cvalue)
+  return (obj)
+}
+
+add_reference.SignedCodec <- function(self,cvalue){
+  self$capturedValue <-cvalue
+  return (self)
 }
 permute_to_constant.SignedCodec <- function(self){
   obj <- SignedConstantCodec(self.len,0)
@@ -233,17 +269,27 @@ UnsignedArrayCodec <- function(len,N){
     ,divider = 256.^(1:len)
     ,scaler = FALSE
     ,encodes = TRUE
+    ,tunnel = NA
   )
   class(obj) <- "UnsignedArrayCodec"
   return (obj)
 }
 
 decode.UnsignedArrayCodec <- function(self,rbs){
+  if (!is.na(self$tunnel)){
+    self$N <- self$tunnel$value
+    self$lR <- self$N*self$l
+  }
   v = as.numeric(rbs$read(self.lR))
-  v = matrix(v,self.len,self.N)
+  v = matrix(v,self.l,self.N)
   v = v %*% self.Multiplier;
   rbs$move(self.lR)
   return (v)
+}
+
+add_reference.UnsignedArrayCodec <- function(self,cvalue){
+  self$tunnel <- cvalue
+  return(self)
 }
 
 SignedArrayCodec <- function(len,N){
@@ -263,6 +309,10 @@ SignedArrayCodec <- function(len,N){
 }
 
 decode.SignedArrayCodec <- function(self,rbs){
+  if (!is.na(self$tunnel)){
+    self$N <- self$tunnel$value
+    self$lR <- self$N*self$l
+  }  
   v = as.numeric(rbs$read(self.lR))
   v = matrix(v,self.len,self.N)
   v = v %*% self.Multiplier
@@ -274,6 +324,11 @@ decode.SignedArrayCodec <- function(self,rbs){
   return (v)
 }
 
+add_reference.SignedArrayCodec <- function(self,cvalue){
+  self$tunnel <- cvalue
+  return(self)
+}
+
 RecordCodec <- function(Codec,n){
   obj = list(
     N = n
@@ -282,11 +337,14 @@ RecordCodec <- function(Codec,n){
     ,uniform = FALSE
     ,scaler = FALSE
     ,encodes = TRUE
+    ,tunnel = NA
   )
   class(obj) <- "RecordCodec"
 }
 
 decode.RecordCodec <- function(self,rbs){
+  if (!is.na(self$tunnel))
+    self$N <- self$tunnel$value
   for (ri in 1:self.N){
     cnt<-0
     for (ci in 1:length(self$codec)){
@@ -314,6 +372,11 @@ decode.RecordCodec <- function(self,rbs){
 purmute_to_array.RecordCodec <- function(self,n){
   self$N = n
   return (self)
+}
+
+add_reference.RecordCodec <- function(self,cvalue){
+  self$tunnel <- cvalue
+  return(self)
 }
 
 BufferCodec <- function(fmt){
@@ -371,6 +434,7 @@ decode.BufferCodec <- function(self,rbs){
  
 BufferCodec.Factory <- function(fmt){
   offsetbinary <- FALSE
+  forwardlinks <- list()
   codecs <- list()
   nac <- names(AtomicCodecs)
   digits = "0123456789"
@@ -392,7 +456,7 @@ BufferCodec.Factory <- function(fmt){
       lp <- cv[ci:length(cv)]=="("
       rp <- cv[ci:length(cv)]==")"
       mp <- cumsum(lp-rp)
-      imp <- purrr::detect_index(mp,function(x) x==0)
+      imp <- which(mp==0)[1]
       rfmt <- cv[(ci+1):(ci+imp-2)]
       rfmt <- paste(rfmt,collapse="")
       rcodecs <- BufferCodec.Factory(rfmt)
@@ -405,9 +469,31 @@ BufferCodec.Factory <- function(fmt){
       codecs[[cnt]] <- AtomicCodec[[c]]
       ci<-ci+1     
     }
-    else if (any(digit == c))
-      
+    else if (any(digit == c)){
+      ld <- which(digit == cv[ci:end])[1]
+      recn <- as.numeric(cv[ci:(ci+ld-1)])
+      codecs[cnt]<-permute_to_array(codecs[[cnt]],recn)
+      ci<-ci+ld
+    }
+    else if (c==">") {
+      #forward link
+      name <- cv(ci+1);
+      cvalue <- tunnel()
+      codecs[cnt] = permute_to_forward_reference(codecs[cnt],cvalue);
+      forwardLinks[[name]] <- cvalue;
+      ci<-ci+2;
+    }
+    else if (c=="<"){
+      name <- cv[ci+1]
+      cvalue <- forwardLinks[[name]];
+      codecs[cnt] = purmute_to_array(codecs[[cnt]],1)
+      codecs[cnt] = add_reference(codecs[[cnt]],cvalue)
+      ci<-ci+2;      
+    }
+    else 
+      ci<-ci+1
   }
+  return (codecs)
 }
 
 # function codecs = Factory(str)

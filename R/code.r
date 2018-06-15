@@ -25,3 +25,31 @@ raw_byte_stream <- function(buf = as.raw(0:255),offset=0){
   environment()
 }
 
+capturedValue <- function(){
+  value <- NA
+  capture<-function(v){
+    value<<-v
+  }
+  environment()
+}
+
+tunnel <- function(){
+  value <-NA
+  capture<-function(v){
+    value<<-v
+  }
+  environment()
+}
+
+vt <- function(t){
+  t0 <-t
+  
+}
+
+origin <- function(v){
+  list(a=1,b=2,t=v)
+}
+
+destination <-function(v){
+  list(a=2,b=3,t=v)
+}
