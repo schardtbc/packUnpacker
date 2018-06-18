@@ -54,4 +54,16 @@ test_that("s8",{
   expect_equal(decode(s8,d),-127)
 })
 
+d<-raw_byte_stream(as.raw(list(255, 127, 0 ,128, 1, 128)))
+test_that("s16",{
+  expect_equal(decode(s16,d),32767)
+  expect_equal(decode(s16,d),-32768)
+  expect_equal(decode(s16,d),-32767)
+})
 
+d<-raw_byte_stream(as.raw(list(255, 255, 255, 127, 0, 0, 0 , 128, 1, 0, 0, 128)))
+test_that("s32",{
+  expect_equal(decode(s32,d),2147483647)
+  expect_equal(decode(s32,d),-2147483648)
+  expect_equal(decode(s32,d),-2147483647)
+})
