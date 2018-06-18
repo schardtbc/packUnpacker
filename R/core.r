@@ -74,7 +74,7 @@ SignedCodec <- function (len,offset_binary=FALSE){
                ,scaler=TRUE
                ,encodes=TRUE)
   if (offset_binary){
-    self$sub  = self$comp    
+    self$sub  = self$comp
     self$comp = 0;
   }
   class(self)<-"SignedCodec"
@@ -82,7 +82,8 @@ SignedCodec <- function (len,offset_binary=FALSE){
 }
 
 decode.UnsignedCodec <- function(self,rbs){
-  v = as.numeric(rbs$read(self.l)) %*% self$m
+  v <- as.numeric(rbs$read(self$l)) %*% self$m
+  v <- v[1,1]
   return (v)
 }
 
@@ -106,8 +107,9 @@ permute_to_constant.UnsignedCodec <- function(self){
 }
 
 decode.SignedCodec <- function(self,rbs){
-  v = as.numeric(rbs$read(self$l)) %*% self$m
-  if (v>self$comp){
+  v <- as.numeric(rbs$read(self$l)) %*% self$m
+  v <- v[1,1]
+  if (v>=self$comp){
     v <- v-self$sub
   }
   return (v)
@@ -129,9 +131,9 @@ add_reference.SignedCodec <- function(self,cvalue){
 }
 permute_to_constant.SignedCodec <- function(self){
   obj <- SignedConstantCodec(self.len,0)
-} 
+}
 
-RelativePositioner <- function(obj,n){
+RelativePositioner <- function(n){
   obj <- list(N = n)
   return (obj)
 }
@@ -149,8 +151,9 @@ permute_to_array.RelativePositioner <- function(self,n){
   return (self)
 }
 
-AbsolutePositioner <- function(obj,n){
+AbsolutePositioner <- function(n){
   obj <- list(N = n)
+  class(obj<-"AbsolutePositioner")
   return (obj)
 }
 
@@ -162,7 +165,23 @@ encode.AbsolutePostioner <- function(self,rbs){
   rbs$seek(self$N)
 }
 
+
 permute_to_array.AbsolutePositioner <- function(self,n){
+  self$N <- n
+  return (self)
+}
+
+CurrentOffsetDecorator <- function(){
+  obj <- list(l = 0, N=NA, scaler = TRUE, encodes = FALSE)
+  class(obj) <- "CurrentOffsetDecorator"
+  return (obj)
+}
+
+decode.CurrentOffsetDecorator <- function(self, rbs){
+  return (rbs$offset)
+}
+
+permute_to_array.CurrentOffsetDecorator <- function(self,n){
   self$N <- n
   return (self)
 }
@@ -211,7 +230,7 @@ permute_to_array.RandomDataGenerator <- function(self,n){
 }
 
 IndexDecorator <- function(v){
-   obj <- list(scaler = TRUE, encodes <- TRUE, N=0, l=0,value = v)
+   obj <- list(scaler = TRUE, encodes = TRUE, N=0, l=0,value = v)
    class(obj) <- "IndexDecorator"
 }
 
@@ -222,7 +241,7 @@ decode.IndexDecorator <- function(self,rbs){
 }
 
 ValueDecorator <- function(v){
-  obj <- list(scaler = TRUE, encodes <- TRUE, N=0, l=0,value = v)
+  obj <- list(scaler = TRUE, encodes = TRUE, N=0, l=0,value = v)
   class(obj) <- "ValueDecorator"
 }
 
@@ -231,12 +250,25 @@ decode.ValueDecorator <- function(self,rbs){
   return (v)
 }
 
+NullTerminatedStringCodec <- function(){
+  obj <- list(l=0,N=0,encodes=TRUE, scaler = FALSE)
+  class(obj) <- "NullTerminatedStringCodec"
+}
+
+decode.NullTerminatedStringCodec <- function(self,rbs){
+  o <- rbs$offset
+  e <- which(rbs$buf[(o+1):length(rbs$buf)]==0)[1]
+  v <- rawToChar(rbs$read(e-o+1))
+  return (v)
+}
+
+
 AtomicCodec <- list(
  x = RelativePositioner(1)
 ,o = AbsolutePositioner(0)
 ,O = CurrentOffsetDecorator()
 ,c = CharCodec()
-,Z = NullTerminatedStringCodec() 
+,Z = NullTerminatedStringCodec()
 ,b = SignedCodec(1)
 ,B = UnsignedCodec(1)
 ,s = SignedCodec(2)
@@ -249,12 +281,12 @@ AtomicCodec <- list(
 ,I = UnsignedCodec(4)
 ,l = SignedCodec(4)
 ,L = UnsignedCodec(4)
-,t = SignedCodec(6) 
-,T = UnsignedCodec(6) 
-,q = int64Codec()
-,Q = uint64Codec() 
-,f = FloatCodec()
-,d = DoubleCodec()
+,t = SignedCodec(6)
+,T = UnsignedCodec(6)
+#,q = int64Codec()
+#,Q = uint64Codec()
+#,f = FloatCodec()
+#,d = DoubleCodec()
 ,v = IndexDecorator(1)
 ,V = ValueDecorator(0)
 ,R = RandomDataGenerator(1)
@@ -312,7 +344,7 @@ decode.SignedArrayCodec <- function(self,rbs){
   if (!is.na(self$tunnel)){
     self$N <- self$tunnel$value
     self$lR <- self$N*self$l
-  }  
+  }
   v = as.numeric(rbs$read(self.lR))
   v = matrix(v,self.len,self.N)
   v = v %*% self.Multiplier
@@ -368,7 +400,7 @@ decode.RecordCodec <- function(self,rbs){
   }
   return (v)
 }
-  
+
 purmute_to_array.RecordCodec <- function(self,n){
   self$N = n
   return (self)
@@ -431,7 +463,7 @@ decode.BufferCodec <- function(self,rbs){
   if (is.list(v) && length(a)==1)
     v <- v[[1]]
 }
- 
+
 BufferCodec.Factory <- function(fmt){
   offsetbinary <- FALSE
   forwardlinks <- list()
@@ -447,7 +479,7 @@ BufferCodec.Factory <- function(fmt){
     if (c=="K"){
       offsetbinary <- TRUE
       ci<-ci+1
-    } 
+    }
     else if (c == 'k') {
       offsetbinary <- FALSE
       ci<-ci+1
@@ -467,7 +499,7 @@ BufferCodec.Factory <- function(fmt){
     else if (any(nac == c)){
       cnt<-cnt+1
       codecs[[cnt]] <- AtomicCodec[[c]]
-      ci<-ci+1     
+      ci<-ci+1
     }
     else if (any(digit == c)){
       ld <- which(digit == cv[ci:end])[1]
@@ -488,9 +520,9 @@ BufferCodec.Factory <- function(fmt){
       cvalue <- forwardLinks[[name]];
       codecs[cnt] = purmute_to_array(codecs[[cnt]],1)
       codecs[cnt] = add_reference(codecs[[cnt]],cvalue)
-      ci<-ci+2;      
+      ci<-ci+2;
     }
-    else 
+    else
       ci<-ci+1
   }
   return (codecs)
@@ -500,7 +532,7 @@ BufferCodec.Factory <- function(fmt){
 # % Static Factory Method Compiles Format String into an cell array of format descriptors for later use.
 # digits =  {'0' '1' '2' '3' '4' '5' '6' '7' '8' '9' '+' '-'};
 # %#function AtomicCodec
-# halswitch('-PUP_OFFSETBINARY');            
+# halswitch('-PUP_OFFSETBINARY');
 # [m,s]=enumeration('AtomicCodec');
 
 # p  = find(str(ci+2:end)==mc,1,'first');
@@ -514,7 +546,7 @@ BufferCodec.Factory <- function(fmt){
 #   fc = SignedBitFieldCodec(codecs{cnt},fielddesc,offsetbinary);
 # end
 # else
-#   if codecs{cnt}.len == 8 
+#   if codecs{cnt}.len == 8
 # fc=uint64BitFieldCodec(codecs{cnt},fielddesc);
 # else
 #   fc = BitFieldCodec(codecs{cnt},fielddesc);
@@ -537,7 +569,7 @@ BufferCodec.Factory <- function(fmt){
 #   if codecs{cnt}.len==8
 # codecs{cnt} = uint64BitFieldArrayCodec(codecs{cnt},fielddesc);
 # else
-#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc); 
+#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc);
 # end
 # end
 # else
@@ -563,7 +595,7 @@ BufferCodec.Factory <- function(fmt){
 # fp = find(p~=0);
 # sp = fp;
 # for pi=2:length(fp); sp(pi)=sp(pi-1)+p(fp(pi)); end;
-# lp = fp(find(sp==0,1,'first'));    
+# lp = fp(find(sp==0,1,'first'));
 # rfmt = BufferCodec.Factory(str(ci+1:ci+lp-2));
 # isUniform = all(cellfun(@(x) x.Scaler,rfmt));
 # cnt=cnt+1;
@@ -598,7 +630,7 @@ BufferCodec.Factory <- function(fmt){
 # hSource = forwardLinks.(name);
 # if isa(codecs{cnt},'UniformRecordCodec')
 # codecs{cnt} = codecs{cnt}.Optimize();
-# end                         
+# end
 # codecs{cnt} = codecs{cnt}.PermuteToArray(1);
 # hTarget=codecs{cnt};
 # addlistener(hSource,'DataParsed',@hTarget.ProcessForwardReference);
@@ -640,8 +672,8 @@ BufferCodec.Factory <- function(fmt){
 # %           starting at byte 1024
 # %           offsets use 0 based indexing
 # %
-# 
-# 
+#
+#
 # %  Arrays - return a list of numbers
 # %    array = Scaler number
 # %    'S8' returns an array of 8 2-byte integers
@@ -669,7 +701,7 @@ BufferCodec.Factory <- function(fmt){
 # %    calls classes decode method to parse buffer
 # %
 # %    Usually the class specified by classname will be a subclass
-# %    of the Recepticle class, but can be of any handle class that implements 
+# %    of the Recepticle class, but can be of any handle class that implements
 # %    a decode function with the pattern:
 #   %    function [b,o]=decode(self,b,o);
 # %
@@ -677,7 +709,7 @@ BufferCodec.Factory <- function(fmt){
 # %   'S_[1 3 7 3 1]'
 # %   breaks an Unsigned short into 5 bitfields
 # %   returning them from low-order to high order bits
-# %  
+# %
 # %  BitField Arrays
 # %   'S10_[1 3 7 3 1]'
 # %   breaks an Unsigned short array of ten elements into 5 bitfields
@@ -690,7 +722,7 @@ BufferCodec.Factory <- function(fmt){
 # %   are split into 8 fields; the first short into 3 fields and the
 # %   second short of each record into 5 fields.
 # %   10 rows will be returned.
-# 
+#
 # %   Written By: Bruce C. Schardt
 # %   Primary Contact:
 #   %       Dr. Bruce C. Schardt
@@ -698,55 +730,55 @@ BufferCodec.Factory <- function(fmt){
 # %       Magnetic Recoding Technology
 # %       Advanced Read Channel Optimization
 # %       bruce.schardt@wdc.com
-# 
+#
 # %   Copyright 2011 Western Digital Corporation
 # %   $URL: http://svn.wdc.com/svn/matexsdk/matex/trunk/UtilityClasses/BufferCodec.m $
 #   %   $Date: 2015-08-20 21:48:00 -0700 (Thu, 20 Aug 2015) $
 #   %   $Author: maguire_b@sc.wdc.com $
 #   %   $Rev: 27876 $
 #   %   $Id: BufferCodec.m 27876 2015-08-21 04:48:00Z maguire_b@sc.wdc.com $
-#   
-#   
+#
+#
 #   %#function CurrentOffsetDecoraor
 # %#function CurrentOffsetForwardReference
 # %#function AbsolutePositioner
 # %#function RelativePositioner
 # %#function CharCodec
-# %#function StringCodec    
+# %#function StringCodec
 # %#function SignedCodec
 # %#function UnsignedCodec
-# %#function UnsignedForwardReferenceCodec    
+# %#function UnsignedForwardReferenceCodec
 # %#function UnsignedArrayCodec
 # %#function SignedArrayCodec
 # %#function uint64Codec
 # %#function int64Codec
 # %#function uint64ArrayCodec
-# %#function int64ArrayCodec    
+# %#function int64ArrayCodec
 # %#function FloatCodec
 # %#function DoubleCodec
 # %#function FloatArrayCodec
-# %#function DoubleArrayCodec    
+# %#function DoubleArrayCodec
 # %#function RecordCodec
 # %#function UniformRecordCodec
 # %#function OptimizedUniformRecordCodec
 # %#function ClassCodec
-# 
+#
 # properties
 # codecs
 # Uniform
 # end
-# 
+#
 # methods
 # function self = BufferCodec(fmt)
 # %Class Constructor given format string
 # if ischar(fmt)
 # self.codecs = BufferCodec.Factory(fmt);
-# else 
+# else
 #   self.codecs = fmt;
 # end
-# self.Uniform = all(cellfun(@(x) x.Scaler,self.codecs));            
-# 
-# 
+# self.Uniform = all(cellfun(@(x) x.Scaler,self.codecs));
+#
+#
 # end
 # function delete(self)
 # for ci=1:length(self.codecs)
@@ -818,19 +850,19 @@ BufferCodec.Factory <- function(fmt){
 # else
 #   [b,o]=self.codecs{ci}.encode(b,o,[]);
 # end
-# end 
 # end
-# end          
+# end
+# end
 # end
 # methods (Static)
 # function codecs = Factory(str)
 # % Static Factory Method Compiles Format String into an cell array of format descriptors for later use.
 # digits =  {'0' '1' '2' '3' '4' '5' '6' '7' '8' '9' '+' '-'};
 # %#function AtomicCodec
-# halswitch('-PUP_OFFSETBINARY');            
+# halswitch('-PUP_OFFSETBINARY');
 # [m,s]=enumeration('AtomicCodec');
 # offsetbinary = false;
-# 
+#
 # codecs = {};
 # cnt = 0;
 # ci=1;
@@ -839,10 +871,10 @@ BufferCodec.Factory <- function(fmt){
 # case 'K'
 # offsetbinary=true;
 # ci=ci+1;
-# halswitch('+PUP_OFFSETBINARY');                        
+# halswitch('+PUP_OFFSETBINARY');
 # case 'k'
 # offsetbinary=false;
-# halswitch('-PUP_OFFSETBINARY');                        
+# halswitch('-PUP_OFFSETBINARY');
 # ci=ci+1;
 # case '_'
 # mc = str(ci+1);
@@ -862,7 +894,7 @@ BufferCodec.Factory <- function(fmt){
 #   fc = SignedBitFieldCodec(codecs{cnt},fielddesc,offsetbinary);
 # end
 # else
-#   if codecs{cnt}.len == 8 
+#   if codecs{cnt}.len == 8
 # fc=uint64BitFieldCodec(codecs{cnt},fielddesc);
 # else
 #   fc = BitFieldCodec(codecs{cnt},fielddesc);
@@ -885,7 +917,7 @@ BufferCodec.Factory <- function(fmt){
 #   if codecs{cnt}.len==8
 # codecs{cnt} = uint64BitFieldArrayCodec(codecs{cnt},fielddesc);
 # else
-#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc); 
+#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc);
 # end
 # end
 # else
@@ -911,7 +943,7 @@ BufferCodec.Factory <- function(fmt){
 # fp = find(p~=0);
 # sp = fp;
 # for pi=2:length(fp); sp(pi)=sp(pi-1)+p(fp(pi)); end;
-# lp = fp(find(sp==0,1,'first'));    
+# lp = fp(find(sp==0,1,'first'));
 # rfmt = BufferCodec.Factory(str(ci+1:ci+lp-2));
 # isUniform = all(cellfun(@(x) x.Scaler,rfmt));
 # cnt=cnt+1;
@@ -946,7 +978,7 @@ BufferCodec.Factory <- function(fmt){
 # hSource = forwardLinks.(name);
 # if isa(codecs{cnt},'UniformRecordCodec')
 # codecs{cnt} = codecs{cnt}.Optimize();
-# end                         
+# end
 # codecs{cnt} = codecs{cnt}.PermuteToArray(1);
 # hTarget=codecs{cnt};
 # addlistener(hSource,'DataParsed',@hTarget.ProcessForwardReference);
@@ -959,6 +991,6 @@ BufferCodec.Factory <- function(fmt){
 # end
 # end
 # end
-# end        
+# end
 # end
 

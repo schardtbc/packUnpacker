@@ -25,6 +25,13 @@ raw_byte_stream <- function(buf = as.raw(0:255),offset=0){
   environment()
 }
 
+ones <- function(L){
+  seq(from = 1, to =1, length.out=L)
+}
+
+zeros <- function(L){
+  seq(from = 0, to =0, length.out=L)
+}
 capturedValue <- function(){
   value <- NA
   capture<-function(v){
@@ -41,15 +48,4 @@ tunnel <- function(){
   environment()
 }
 
-vt <- function(t){
-  t0 <-t
-  
-}
 
-origin <- function(v){
-  list(a=1,b=2,t=v)
-}
-
-destination <-function(v){
-  list(a=2,b=3,t=v)
-}
