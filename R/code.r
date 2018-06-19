@@ -8,7 +8,7 @@ raw_byte_stream <- function(buf = as.raw(0:255),offset=0){
     offset<<-o
   }
   move <- function(r){
-    offset<<-offset+move
+    offset<<-offset+r
     if (offset<0){
       offset <<- 0
     }

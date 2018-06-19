@@ -297,7 +297,7 @@ UnsignedArrayCodec <- function(len,N){
     l = len
     ,N = N
     ,lR = N*len
-    ,multiplier = (256.^(0:len-1))
+    ,multiplier = (256.^(0:(len-1)))
     ,divider = 256.^(1:len)
     ,scaler = FALSE
     ,encodes = TRUE
@@ -312,10 +312,10 @@ decode.UnsignedArrayCodec <- function(self,rbs){
     self$N <- self$tunnel$value
     self$lR <- self$N*self$l
   }
-  v = as.numeric(rbs$read(self.lR))
-  v = matrix(v,self.l,self.N)
-  v = v %*% self.Multiplier;
-  rbs$move(self.lR)
+  v <- as.numeric(rbs$read(self$lR))
+  v = matrix(v,self$l,self$N)
+  v <- t(v) %*% as.matrix(self$multiplier)
+  v<-v[,1]
   return (v)
 }
 
@@ -329,10 +329,10 @@ SignedArrayCodec <- function(len,N){
     l = len
     ,N = N
     ,lR = N*len
-    ,multiplier = (256.^(0:len-1))
+    ,multiplier = (256.^(0:(len-1)))
     ,divider = 256.^(1:len)
-    ,comp = 2^(8*self.l-1)
-    ,sub = 2^(8*self.l)
+    ,comp = 2^(8*self$l-1)
+    ,sub = 2^(8*self$l)
     ,scaler = FALSE
     ,encodes = TRUE
   )
@@ -345,14 +345,14 @@ decode.SignedArrayCodec <- function(self,rbs){
     self$N <- self$tunnel$value
     self$lR <- self$N*self$l
   }
-  v = as.numeric(rbs$read(self.lR))
-  v = matrix(v,self.len,self.N)
-  v = v %*% self.Multiplier
-  np <-  v>=self.Comp;
+  v = as.numeric(rbs$read(self$lR))
+  v = matrix(v,self.len,self$N)
+  v = v %*% self$Multiplier
+  np <-  v>=self$Comp;
   if (any(np)){
-     v[np]=v[np] - self.sub
+     v[np]=v[np] - self$sub
   }
-  rbs$move(self.lR)
+  rbs$move(self$lR)
   return (v)
 }
 
