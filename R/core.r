@@ -337,7 +337,7 @@ decode.NullTerminatedStringCodec <- function(self,rbs){
 }
 
 
-AtomicCodec <- list(
+AtomicCodecs <- list(
  x = RelativePositioner()
 ,o = AbsolutePositioner()
 ,O = CurrentOffsetDecorator()
@@ -478,7 +478,7 @@ decode.RecordCodec <- function(self,rbs){
       if (is.na(t) || is.null(t) || length(t)==0) next
       if (cnt==0){
         cnt<-cnt+1
-        r<-list(t)
+        r<-t
       }
       else{
         cnt<-cnt+1
@@ -489,9 +489,10 @@ decode.RecordCodec <- function(self,rbs){
       v<-r
     }
     else{
-      v[ri]<-r
+      v<-c(v,r)
     }
   }
+  v <- matrix(v,self$N,length(self$codecs),byrow = TRUE)
   return (v)
 }
 
@@ -516,7 +517,7 @@ BufferCodec <- function(fmt){
     codecs <- NA
     ,uniform = FALSE
   )
-  if (ischar(fmt))
+  if (class(fmt)=="character")
     obj$codecs <- BufferCodec.Factory(fmt)
   else
     obj$codecs <- fmt
@@ -539,7 +540,7 @@ decode.BufferCodec <- function(self,rbs){
       }
       else {
         cnt<-cnt+1
-        v[cnt]<-t
+        v<-c(v,t)
       }
     }
   }
@@ -556,11 +557,11 @@ decode.BufferCodec <- function(self,rbs){
       }
       else {
         cnt<-cnt+1
-        v[cnt]<-t
+        v <- c(v,t)
       }
     }
   }
-  if (is.list(v) && length(a)==1)
+  if (is.list(v) && length(v)==1)
     v <- v[[1]]
 }
 
@@ -574,7 +575,7 @@ BufferCodec.Factory <- function(fmt){
   cnt<-0
   ci<-1
   cv <- strsplit(fmt,split="")[[1]]
-  while (ci<length(cv)){
+  while (ci<=length(cv)){
     c <- cv[ci]
     if (c=="K"){
       offsetbinary <- TRUE
@@ -598,13 +599,13 @@ BufferCodec.Factory <- function(fmt){
     }
     else if (any(nac == c)){
       cnt<-cnt+1
-      codecs[[cnt]] <- AtomicCodec[[c]]
+      codecs[[cnt]] <- AtomicCodecs[[c]]
       ci<-ci+1
     }
-    else if (any(digit == c)){
-      ld <- which(digit == cv[ci:end])[1]
+    else if (any(digits == c)){
+      ld <- which(sapply(cv[ci:length(cv)],is.element,digits,USE.NAMES = FALSE))[1]
       recn <- as.numeric(cv[ci:(ci+ld-1)])
-      codecs[cnt]<-permute_to_array(codecs[[cnt]],recn)
+      codecs[[cnt]]<-permute_to_array(codecs[[cnt]],recn)
       ci<-ci+ld
     }
     else if (c==">") {
@@ -627,6 +628,14 @@ BufferCodec.Factory <- function(fmt){
   }
   return (codecs)
 }
+
+unpack <- function(fmt,b,o = 0){
+  codec <- BufferCodec(fmt)
+  rbs <- raw_byte_stream(b,o)
+  r <- decode.codec(rbs)
+  return (r)
+}
+
 
 # function codecs = Factory(str)
 # % Static Factory Method Compiles Format String into an cell array of format descriptors for later use.
