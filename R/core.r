@@ -489,7 +489,7 @@ decode.RecordCodec <- function(self,rbs){
       v<-r
     }
     else{
-      v[ri,]<-r
+      v[ri]<-r
     }
   }
   return (v)
