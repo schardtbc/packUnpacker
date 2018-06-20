@@ -23,3 +23,10 @@ test_that("u32 array",{
   expect_equal(decode(u32,d),c(0,1))
   expect_equal(decode(u32,d),c(257,2^32-255))
 })
+
+u32 <- UnsignedCodec(4)
+ua32 <-UnsignedArrayCodec(4,10)
+pau32 <- permute_to_array(u32,10)
+test_that("permute_to_array",{
+  expect_equal(pau32,ua32)
+})
