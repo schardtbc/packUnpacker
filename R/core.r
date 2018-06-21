@@ -514,24 +514,24 @@ add_reference.RecordCodec <- function(self,cvalue){
 
 BufferCodec <- function(fmt){
   obj <- list(
-    codecs <- NA
+    codecs = NA
     ,uniform = FALSE
   )
   if (class(fmt)=="character")
     obj$codecs <- BufferCodec.Factory(fmt)
   else
     obj$codecs <- fmt
-  obj$uniform <- all(lapply(obj$codecs,function(x) x$scaler));
+  obj$uniform <- all(sapply(obj$codecs,function(x) x$scaler));
   class(obj)<-"BufferCodec"
   return (obj)
 }
 
 decode.BufferCodec <- function(self,rbs){
-  if (self$unform){
+  if (self$uniform){
     cnt<-0
     for (codec in self$codecs){
       t <- decode(codec,rbs)
-      if (is.NA(t) || is.null(t) || length(t)==0){
+      if (is.na(t) || is.null(t) || length(t)==0){
         next
       }
       if (cnt ==0){
@@ -548,7 +548,7 @@ decode.BufferCodec <- function(self,rbs){
     cnt<-0
     for (codec in self$codecs){
       t <- decode(codec,rbs)
-      if (is.NA(t) || is.null(t) || length(t)==0){
+      if (is.na(t) || is.null(t) || length(t)==0){
         next
       }
       if (cnt==0){
@@ -632,7 +632,7 @@ BufferCodec.Factory <- function(fmt){
 unpack <- function(fmt,b,o = 0){
   codec <- BufferCodec(fmt)
   rbs <- raw_byte_stream(b,o)
-  r <- decode.codec(rbs)
+  r <- decode(codec,rbs)
   return (r)
 }
 
