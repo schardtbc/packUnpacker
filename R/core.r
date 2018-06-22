@@ -96,10 +96,6 @@ permute_to_forward_reference.SignedCodec <- function(self,cvalue){
   return (obj)
 }
 
-add_reference.UnsignedCodec <- function(self,cvalue){
-  self$capturedValue <-cvalue
-  return (self)
-}
 
 permute_to_constant.UnsignedCodec <- function(self){
   obj <- UnsignedConstantCodec(self$l,0);
@@ -149,10 +145,6 @@ permute_to_forward_reference.SignedCodec <- function(self,cvalue){
   return (obj)
 }
 
-add_reference.SignedCodec <- function(self,cvalue){
-  self$tunnel <- cvalue
-  return (self)
-}
 
 permute_to_constant.SignedCodec <- function(self){
   obj <- SignedConstantCodec(self$len,0)
@@ -165,13 +157,13 @@ permute_to_constant.SignedCodec <- function(self){
 #################################################################################
 
 
-decode.UnsignedForwardReferenceCodec(self,rbs){
+decode.UnsignedForwardReferenceCodec <- function(self,rbs){
   v <- as.numeric(rbs$read(self$l)) %*% self$m
   v <- v[1,1]
   if (v>=self$comp){
     v <- v-self$sub
   }
-  self$tunnel$capture(v)
+  self$tunnel$set(v)
   return (v)
 }
 
@@ -182,13 +174,13 @@ decode.UnsignedForwardReferenceCodec(self,rbs){
 #################################################################################
 
 
-decode.SignedForwardReferenceCodec(self,rbs){
+decode.SignedForwardReferenceCodec <- function(self,rbs){
   v <- as.numeric(rbs$read(self$l)) %*% self$m
   v <- v[1,1]
   if (v>=self$comp){
     v <- v-self$sub
   }
-  self$tunnel$capture(v)
+  self$tunnel$set(v)
   return (v)
 }
 
@@ -206,10 +198,12 @@ RelativePositioner <- function(n = 0){
 
 decode.RelativePositioner <- function(self,rbs){
   rbs$move(self$N)
+  return (NA)
 }
 
 encode.RelativePositioner <- function(self,rbs){
   rbs$move(self$N)
+  return (NA)
 }
 
 permute_to_array.RelativePositioner <- function(self,n){
@@ -224,21 +218,34 @@ permute_to_array.RelativePositioner <- function(self,n){
 #################################################################################
 
 AbsolutePositioner <- function(n = 0){
-  obj <- list(N = n)
+  obj <- list(N = n, tunnel = NA)
   class(obj)<-"AbsolutePositioner"
   return (obj)
 }
 
 decode.AbsolutePositioner <- function(self,rbs){
-  rbs$seek(self$N-1)
+  if (is.na(self$tunnel))
+    rbs$seek(self$N-1)
+  else
+    rbs$seek(self$tunnel$get())
+  return (NA)
 }
 
 encode.AbsolutePositioner <- function(self,rbs){
-  rbs$seek(self$N-1)
+  if (is.na(self$tunnel))
+    rbs$seek(self$N-1)
+  else
+    rbs$seek(self$tunnel$get())
+  return (NA)
 }
 
 permute_to_array.AbsolutePositioner <- function(self,n){
   self$N <- n
+  return (self)
+}
+
+add_reference.AbsolutePositioner <- function(self,cvalue){
+  self$tunnel <- cvalue
   return (self)
 }
 
@@ -429,7 +436,7 @@ UnsignedArrayCodec <- function(len,N){
 
 decode.UnsignedArrayCodec <- function(self,rbs){
   if (!is.na(self$tunnel)){
-    self$N <- self$tunnel$value
+    self$N <- self$tunnel$get()
     self$lR <- self$N*self$l
   }
   v <- as.numeric(rbs$read(self$lR))
@@ -469,7 +476,7 @@ SignedArrayCodec <- function(len,N){
 
 decode.SignedArrayCodec <- function(self,rbs){
   if (!is.na(self$tunnel)){
-    self$N <- self$tunnel$value
+    self$N <- self$tunnel$get()
     self$lR <- self$N*self$l
   }
   v <- as.numeric(rbs$read(self$lR))
@@ -510,7 +517,7 @@ RecordCodec <- function(Codec,n){
 
 decode.RecordCodec <- function(self,rbs){
   if (!is.na(self$tunnel))
-    self$N <- self$tunnel$value
+    self$N <- self$tunnel$get()
   for (ri in 1:self$N){
     cnt<-0
     for (codec in self$codecs){
@@ -532,7 +539,7 @@ decode.RecordCodec <- function(self,rbs){
       v<-c(v,r)
     }
   }
-  v <- matrix(v,self$N,length(self$codecs),byrow = TRUE)
+  v <- matrix(v,self$N,length(v)/self$N,byrow = TRUE)
   return (v)
 }
 
@@ -544,6 +551,24 @@ permute_to_array.RecordCodec <- function(self,n){
 add_reference.RecordCodec <- function(self,cvalue){
   self$tunnel <- cvalue
   return(self)
+}
+
+#################################################################################
+#                                                                               #
+# StructureCodec                                                                #
+#                                                                               #
+#################################################################################
+
+StructureCodec <- function(fmt,name_list){
+  obj <- list( format = fmt
+              ,codec = BufferCodec(fmt)
+              ,properties = name_list)
+  class(obj) <- "StructureCodec"
+}
+
+decode.StructureCodec <- function(self,rbs){
+  v <- decode(self$codec,rbs)
+  names(v) <- self$properties
 }
 
 #################################################################################
@@ -597,12 +622,13 @@ decode.BufferCodec <- function(self,rbs){
       }
       else {
         cnt<-cnt+1
-        v <- c(v,t)
+        v <- c(v,list(t))
       }
     }
   }
   if (is.list(v) && length(v)==1)
     v <- v[[1]]
+  return (v)
 }
 
 BufferCodec.Factory <- function(fmt){
@@ -651,7 +677,7 @@ BufferCodec.Factory <- function(fmt){
     else if (c==">") {
       #forward link
       name <- cv(ci+1);
-      cvalue <- tunnel()
+      cvalue <- passive_tunnel()
       codecs[cnt] = permute_to_forward_reference(codecs[cnt],cvalue);
       forwardLinks[[name]] <- cvalue;
       ci<-ci+2;
@@ -663,483 +689,19 @@ BufferCodec.Factory <- function(fmt){
       codecs[cnt] = add_reference(codecs[[cnt]],cvalue)
       ci<-ci+2;
     }
+    else if (c=="["){
+      ld <- which(cv[ci:length(cv)]=="]")[1]
+      codec_name <- paste(cv[(ci+1):(ci+ld-1)],sep="")
+      codec <- parse(text = paste(codec_name,"()",sep=""))
+      cnt <- cnt+1
+      codecs[[cnt]]<-eval(codec)
+      ci = ci + ld
+    }
     else
       ci<-ci+1
   }
   return (codecs)
 }
 
-unpack <- function(fmt,b,o = 0){
-  codec <- BufferCodec(fmt)
-  rbs <- raw_byte_stream(b,o)
-  r <- decode(codec,rbs)
-  return (r)
-}
 
-
-# function codecs = Factory(str)
-# % Static Factory Method Compiles Format String into an cell array of format descriptors for later use.
-# digits =  {'0' '1' '2' '3' '4' '5' '6' '7' '8' '9' '+' '-'};
-# %#function AtomicCodec
-# halswitch('-PUP_OFFSETBINARY');
-# [m,s]=enumeration('AtomicCodec');
-
-# p  = find(str(ci+2:end)==mc,1,'first');
-# fielddesc = str(ci+1:ci+p+1);
-# fielddesc = eval(fielddesc);
-# if codecs{cnt}.Scaler
-# if any(fielddesc<0)
-# if codecs{cnt}.len == 8
-# fc=uint64SignedBitFieldCodec(codecs{cnt},fielddesc);
-# else
-#   fc = SignedBitFieldCodec(codecs{cnt},fielddesc,offsetbinary);
-# end
-# else
-#   if codecs{cnt}.len == 8
-# fc=uint64BitFieldCodec(codecs{cnt},fielddesc);
-# else
-#   fc = BitFieldCodec(codecs{cnt},fielddesc);
-# end
-# end
-# nfields = length(fielddesc);
-# for ii=0:nfields-1
-# codecs{cnt+ii}=fc;
-# end
-# cnt=cnt+nfields-1;
-# else
-#   if mc==']'
-# if any(fielddesc<0)
-# if codecs{cnt}.len==8
-# codecs{cnt} = int64BitFieldArrayCodec(codecs{cnt},fielddesc,offsetbinary);
-# else
-#   codecs{cnt} = SignedBitFieldArrayCodec(codecs{cnt},fielddesc,offsetbinary);
-# end
-# else
-#   if codecs{cnt}.len==8
-# codecs{cnt} = uint64BitFieldArrayCodec(codecs{cnt},fielddesc);
-# else
-#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc);
-# end
-# end
-# else
-#   if  any(cellfun(@(x) any(x<0),fielddesc))
-# codecs{cnt} = SignedBitFieldMatrixCodec(codecs{cnt},fielddesc);
-# else
-#   codecs{cnt} = BitFieldMatrixCodec(codecs{cnt},fielddesc);
-# end
-# end
-# end
-# ci=ci+p+2;
-# case '['
-# p  = find(str(ci+1:end)==']',1,'first');
-# classname = str(ci+1:ci+p-1);
-# cnt=cnt+1;
-# codecs{cnt} = ClassCodec(classname,1);
-# ci=ci+p;
-# case '('
-# p  = (str(ci:end)=='(') - (str(ci:end)==')');
-# if sum(p)~=0
-# error('BufferCodec.Factory, format string, %s, has unbalanced parentheses',str);
-# end
-# fp = find(p~=0);
-# sp = fp;
-# for pi=2:length(fp); sp(pi)=sp(pi-1)+p(fp(pi)); end;
-# lp = fp(find(sp==0,1,'first'));
-# rfmt = BufferCodec.Factory(str(ci+1:ci+lp-2));
-# isUniform = all(cellfun(@(x) x.Scaler,rfmt));
-# cnt=cnt+1;
-# if isUniform
-# codecs{cnt}=UniformRecordCodec(rfmt,1);
-# else
-#   codecs{cnt}=RecordCodec(rfmt,1);
-# end
-# ci=ci+lp;
-# case s
-# cnt=cnt+1;
-# codecs{cnt} = AtomicCodec.(str(ci)).codec;
-# ci=ci+1;
-# case digits
-# cstr = cellfun(@(x) {char(x)},(num2cell(int8(str(ci:end)))));
-# nums = ismember(cstr,digits);
-# nums = [nums 0];
-# ld = find(nums==0,1,'first')-1;
-# recn = str2num(str(ci:ci+ld-1));
-# if isa(codecs{cnt},'UniformRecordCodec')
-# codecs{cnt} = codecs{cnt}.Optimize();
-# end
-# codecs{cnt} = codecs{cnt}.PermuteToArray(recn);
-# ci=ci+ld;
-# case '>' %forward link
-# name = str(ci+1);
-# codecs{cnt} = codecs{cnt}.PermuteToForwardReference();
-# forwardLinks.(name) = codecs{cnt};
-# ci=ci+2;
-# case '<' %consume forward link
-# name = str(ci+1);
-# hSource = forwardLinks.(name);
-# if isa(codecs{cnt},'UniformRecordCodec')
-# codecs{cnt} = codecs{cnt}.Optimize();
-# end
-# codecs{cnt} = codecs{cnt}.PermuteToArray(1);
-# hTarget=codecs{cnt};
-# addlistener(hSource,'DataParsed',@hTarget.ProcessForwardReference);
-# ci=ci+2;
-# case ':'
-# codecs{cnt} = codecs{cnt}.PermuteToConstant();
-# ci=ci+1;
-# otherwise
-# ci=ci+1;
-# end
-# end
-# end
-
-# classdef BufferCodec < handle
-# %BufferCodec Used to Code/Decode (Pack/Unpack) byte buffers
-# %   Detailed explanation goes here
-# %
-# % Format specifier
-# % Scalers return a single number
-# %   'c' character
-# %   'b' signed    1-byte integer
-# %   'B' unsigned  1-byte integer
-# %   's' signed    2-byte integer
-# %   'S' unsigned  2-byte integer
-# %   'l' signed    4-byte integer
-# %   'L' unsigned  4-byte integer
-# %   't' signed    6-byte integer
-# %   'T' unsigned  6-byte integer
-# %   'q' signed    8-byte integer
-# %   'Q' unsigned  8-byte integer
-# %   'f' float 32
-# %   'd' float 64 (double)
-# %
-# % Positioners - do not return value; just changes offset
-# %   'x' pad byte
-# %   'x8' 8 pad bytes
-# %   'o' absolute offset
-# %   'o1024' sets current offset to 1024, next value parsed
-# %           starting at byte 1024
-# %           offsets use 0 based indexing
-# %
-#
-#
-# %  Arrays - return a list of numbers
-# %    array = Scaler number
-# %    'S8' returns an array of 8 2-byte integers
-# %
-# %  Uniform Records
-# %    (Scaler {Scaler})
-# %    '(SSbBL)' return array of 5 numbers
-# %
-# %  Uniform Record Array
-# %    all elements of record are Scalers
-# %    (Uniform Record) number
-# %    '(SSbBL)n' return an nx5 matrix
-# %
-# %  Records - Non Uniform
-# %    All elements of record are not Scalers
-# %    '(bSs32)'   will return a    3 element cell array
-# %    '(bSs32)n' will reutrn an nx3 element cell array
-# %
-# %  Class
-# %    '[ClassName]'
-# %    returns instance of specified class
-# %    calls the classes decode method to parse buffer
-# %    '[ClassName]n'
-# %    returns an array length(n) of the specified class
-# %    calls classes decode method to parse buffer
-# %
-# %    Usually the class specified by classname will be a subclass
-# %    of the Recepticle class, but can be of any handle class that implements
-# %    a decode function with the pattern:
-#   %    function [b,o]=decode(self,b,o);
-# %
-# %  BitFields
-# %   'S_[1 3 7 3 1]'
-# %   breaks an Unsigned short into 5 bitfields
-# %   returning them from low-order to high order bits
-# %
-# %  BitField Arrays
-# %   'S10_[1 3 7 3 1]'
-# %   breaks an Unsigned short array of ten elements into 5 bitfields
-# %   returning them from low-order  to hi-order bits
-# %   bitfields are columns rows are each number from original array
-# %
-# %  BitField Matrix
-# %   '(SS)10_{8 4 4; 4 4 4 2 2}'
-# %   In this example 10 records constisting of two unsigned shorts
-# %   are split into 8 fields; the first short into 3 fields and the
-# %   second short of each record into 5 fields.
-# %   10 rows will be returned.
-#
-# %   Written By: Bruce C. Schardt
-# %   Primary Contact:
-#   %       Dr. Bruce C. Schardt
-# %       Sr. Staff Electronic Design Engineer
-# %       Magnetic Recoding Technology
-# %       Advanced Read Channel Optimization
-# %       bruce.schardt@wdc.com
-#
-# %   Copyright 2011 Western Digital Corporation
-# %   $URL: http://svn.wdc.com/svn/matexsdk/matex/trunk/UtilityClasses/BufferCodec.m $
-#   %   $Date: 2015-08-20 21:48:00 -0700 (Thu, 20 Aug 2015) $
-#   %   $Author: maguire_b@sc.wdc.com $
-#   %   $Rev: 27876 $
-#   %   $Id: BufferCodec.m 27876 2015-08-21 04:48:00Z maguire_b@sc.wdc.com $
-#
-#
-#   %#function CurrentOffsetDecoraor
-# %#function CurrentOffsetForwardReference
-# %#function AbsolutePositioner
-# %#function RelativePositioner
-# %#function CharCodec
-# %#function StringCodec
-# %#function SignedCodec
-# %#function UnsignedCodec
-# %#function UnsignedForwardReferenceCodec
-# %#function UnsignedArrayCodec
-# %#function SignedArrayCodec
-# %#function uint64Codec
-# %#function int64Codec
-# %#function uint64ArrayCodec
-# %#function int64ArrayCodec
-# %#function FloatCodec
-# %#function DoubleCodec
-# %#function FloatArrayCodec
-# %#function DoubleArrayCodec
-# %#function RecordCodec
-# %#function UniformRecordCodec
-# %#function OptimizedUniformRecordCodec
-# %#function ClassCodec
-#
-# properties
-# codecs
-# Uniform
-# end
-#
-# methods
-# function self = BufferCodec(fmt)
-# %Class Constructor given format string
-# if ischar(fmt)
-# self.codecs = BufferCodec.Factory(fmt);
-# else
-#   self.codecs = fmt;
-# end
-# self.Uniform = all(cellfun(@(x) x.Scaler,self.codecs));
-#
-#
-# end
-# function delete(self)
-# for ci=1:length(self.codecs)
-# self.codecs{ci}=[];
-# end
-# end
-# function [v,b,o]=decode(self,b,o)
-# %decode based on compiled format
-# if self.Uniform
-# cnt=0;
-# for ci=1:length(self.codecs)
-# [t,b,o]=self.codecs{ci}.decode(b,o);
-# if isempty(t)
-# continue;
-# end
-# if cnt==0
-# cnt=cnt+1;
-# v=t;
-# else
-#   cnt=cnt+1;
-# v(cnt)=t;
-# end
-# end
-# else
-#   cnt=0;
-# for ci=1:length(self.codecs)
-# [t,b,o]=self.codecs{ci}.decode(b,o);
-# if isempty(t)
-# continue;
-# end
-# if cnt==0
-# cnt=cnt+1;
-# v={t};
-# else
-#   cnt=cnt+1;
-# v{cnt}=t;
-# end
-# end
-# end
-# if iscell(v) && length(v)==1
-# v=v{1};
-# end
-# end
-# function [b,o]=encode(self,b,o,varargin)
-# if length(self.codecs)==1
-# [b,o]=self.codecs{1}.encode(b,o,varargin{:});
-# return;
-# elseif length(varargin)==1
-# v=varargin{1};
-# else
-#   v=varargin;
-# end
-# if iscell(v)
-# cnt=0;
-# for ci=1:length(self.codecs)
-# if self.codecs{ci}.encodes
-# cnt=cnt+1;
-# [b,o]=self.codecs{ci}.encode(b,o,v{cnt});
-# else
-#   [b,o]=self.codecs{ci}.encode(b,o,[]);
-# end
-# end
-# else
-#   cnt=0;
-# for ci=1:length(self.codecs)
-# if self.codecs{ci}.encodes
-# cnt=cnt+1;
-# [b,o]=self.codecs{ci}.encode(b,o,v(cnt));
-# else
-#   [b,o]=self.codecs{ci}.encode(b,o,[]);
-# end
-# end
-# end
-# end
-# end
-# methods (Static)
-# function codecs = Factory(str)
-# % Static Factory Method Compiles Format String into an cell array of format descriptors for later use.
-# digits =  {'0' '1' '2' '3' '4' '5' '6' '7' '8' '9' '+' '-'};
-# %#function AtomicCodec
-# halswitch('-PUP_OFFSETBINARY');
-# [m,s]=enumeration('AtomicCodec');
-# offsetbinary = false;
-#
-# codecs = {};
-# cnt = 0;
-# ci=1;
-# while ci<=length(str)
-# switch str(ci)
-# case 'K'
-# offsetbinary=true;
-# ci=ci+1;
-# halswitch('+PUP_OFFSETBINARY');
-# case 'k'
-# offsetbinary=false;
-# halswitch('-PUP_OFFSETBINARY');
-# ci=ci+1;
-# case '_'
-# mc = str(ci+1);
-# if mc=='['
-# mc=']';
-# elseif mc=='{';
-# mc='}';
-# end
-# p  = find(str(ci+2:end)==mc,1,'first');
-# fielddesc = str(ci+2:ci+p+1);
-# fielddesc = eval(fielddesc);
-# if codecs{cnt}.Scaler
-# if any(fielddesc<0)
-# if codecs{cnt}.len == 8
-# fc=uint64SignedBitFieldCodec(codecs{cnt},fielddesc);
-# else
-#   fc = SignedBitFieldCodec(codecs{cnt},fielddesc,offsetbinary);
-# end
-# else
-#   if codecs{cnt}.len == 8
-# fc=uint64BitFieldCodec(codecs{cnt},fielddesc);
-# else
-#   fc = BitFieldCodec(codecs{cnt},fielddesc);
-# end
-# end
-# nfields = length(fielddesc);
-# for ii=0:nfields-1
-# codecs{cnt+ii}=fc;
-# end
-# cnt=cnt+nfields-1;
-# else
-#   if mc==']'
-# if any(fielddesc<0)
-# if codecs{cnt}.len==8
-# codecs{cnt} = int64BitFieldArrayCodec(codecs{cnt},fielddesc,offsetbinary);
-# else
-#   codecs{cnt} = SignedBitFieldArrayCodec(codecs{cnt},fielddesc,offsetbinary);
-# end
-# else
-#   if codecs{cnt}.len==8
-# codecs{cnt} = uint64BitFieldArrayCodec(codecs{cnt},fielddesc);
-# else
-#   codecs{cnt} = BitFieldArrayCodec(codecs{cnt},fielddesc);
-# end
-# end
-# else
-#   if  any(cellfun(@(x) any(x<0),fielddesc))
-# codecs{cnt} = SignedBitFieldMatrixCodec(codecs{cnt},fielddesc);
-# else
-#   codecs{cnt} = BitFieldMatrixCodec(codecs{cnt},fielddesc);
-# end
-# end
-# end
-# ci=ci+p+2;
-# case '['
-# p  = find(str(ci+1:end)==']',1,'first');
-# classname = str(ci+1:ci+p-1);
-# cnt=cnt+1;
-# codecs{cnt} = ClassCodec(classname,1);
-# ci=ci+p;
-# case '('
-# p  = (str(ci:end)=='(') - (str(ci:end)==')');
-# if sum(p)~=0
-# error('BufferCodec.Factory, format string, %s, has unbalanced parentheses',str);
-# end
-# fp = find(p~=0);
-# sp = fp;
-# for pi=2:length(fp); sp(pi)=sp(pi-1)+p(fp(pi)); end;
-# lp = fp(find(sp==0,1,'first'));
-# rfmt = BufferCodec.Factory(str(ci+1:ci+lp-2));
-# isUniform = all(cellfun(@(x) x.Scaler,rfmt));
-# cnt=cnt+1;
-# if isUniform
-# codecs{cnt}=UniformRecordCodec(rfmt,1);
-# else
-#   codecs{cnt}=RecordCodec(rfmt,1);
-# end
-# ci=ci+lp;
-# case s
-# cnt=cnt+1;
-# codecs{cnt} = AtomicCodec.(str(ci)).codec;
-# ci=ci+1;
-# case digits
-# cstr = cellfun(@(x) {char(x)},(num2cell(int8(str(ci:end)))));
-# nums = ismember(cstr,digits);
-# nums = [nums 0];
-# ld = find(nums==0,1,'first')-1;
-# recn = str2num(str(ci:ci+ld-1));
-# if isa(codecs{cnt},'UniformRecordCodec')
-# codecs{cnt} = codecs{cnt}.Optimize();
-# end
-# codecs{cnt} = codecs{cnt}.PermuteToArray(recn);
-# ci=ci+ld;
-# case '>' %forward link
-# name = str(ci+1);
-# codecs{cnt} = codecs{cnt}.PermuteToForwardReference();
-# forwardLinks.(name) = codecs{cnt};
-# ci=ci+2;
-# case '<' %consume forward link
-# name = str(ci+1);
-# hSource = forwardLinks.(name);
-# if isa(codecs{cnt},'UniformRecordCodec')
-# codecs{cnt} = codecs{cnt}.Optimize();
-# end
-# codecs{cnt} = codecs{cnt}.PermuteToArray(1);
-# hTarget=codecs{cnt};
-# addlistener(hSource,'DataParsed',@hTarget.ProcessForwardReference);
-# ci=ci+2;
-# case ':'
-# codecs{cnt} = codecs{cnt}.PermuteToConstant();
-# ci=ci+1;
-# otherwise
-# ci=ci+1;
-# end
-# end
-# end
-# end
-# end
 

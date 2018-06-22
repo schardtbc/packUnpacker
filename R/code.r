@@ -22,16 +22,25 @@ raw_byte_stream <- function(buf = as.raw(0:255),offset=0){
   remaining <- function(){
     baseenv()$length(buf) - offset
   }
-  environment()
+  obj <- environment()
+  class(obj) <- "raw_byte_stream"
+  return (obj)
 }
 
-ones <- function(L){
-  seq(from = 1, to =1, length.out=L)
+ones <- function(rows = 1, cols = 1){
+  v <- seq(from = 1, to =1, length.out= rows*cols)
+  if (rows >1 || cols >1)
+    v <- matrix(v,rows,cols)
+  return (v)
 }
 
-zeros <- function(L){
-  seq(from = 0, to =0, length.out=L)
+zeros <- function(rows = 1, cols = 1){
+  v <- seq(from = 0, to =0, length.out= rows*cols)
+  if (rows >1 || cols >1)
+    v <- matrix(v,rows,cols)
+  return (v)
 }
+
 capturedValue <- function(){
   value <- NA
   capture<-function(v){
@@ -40,12 +49,17 @@ capturedValue <- function(){
   environment()
 }
 
-tunnel <- function(){
-  value <-NA
-  capture<-function(v){
-    value<<-v
+PassiveTunnel <- function(){
+  data <-NA
+  set<-function(v){
+    data<<-v
   }
-  environment()
+  get<-function(){
+    return (data)
+  }
+  obj <- environment()
+  class(obj) <- "PassiveTunnel"
+  return (obj)
 }
 
 
