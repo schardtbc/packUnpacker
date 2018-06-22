@@ -88,8 +88,11 @@ permute_to_array.UnsignedCodec <- function (self,n){
   obj <- UnsignedArrayCodec(self$l,n)
   return (obj)
 }
-permute_to_forward_reference.UnsignedCodec <- function(self,cvalue){
-  obj <- UnsignedForwardReferenceCodec(self$l,cvalue)
+
+permute_to_forward_reference.SignedCodec <- function(self,cvalue){
+  obj <- self
+  obj$tunnel <- cvalue
+  class(obj) <- "UnsignedForwardReferenceCodec"
   return (obj)
 }
 
@@ -140,16 +143,53 @@ permute_to_array.SignedCodec <- function(self,n){
 }
 
 permute_to_forward_reference.SignedCodec <- function(self,cvalue){
-  obj <- SignedForwardReferenceCodec(self$l,cvalue)
+  obj <- self
+  obj$tunnel <- cvalue
+  class(obj) <- "SignedForwardReferenceCodec"
   return (obj)
 }
 
 add_reference.SignedCodec <- function(self,cvalue){
-  self$capturedValue <-cvalue
+  self$tunnel <- cvalue
   return (self)
 }
+
 permute_to_constant.SignedCodec <- function(self){
-  obj <- SignedConstantCodec(self.len,0)
+  obj <- SignedConstantCodec(self$len,0)
+}
+
+#################################################################################
+#                                                                               #
+# UnsignedForwardReferenceCodec                                                   #
+#                                                                               #
+#################################################################################
+
+
+decode.UnsignedForwardReferenceCodec(self,rbs){
+  v <- as.numeric(rbs$read(self$l)) %*% self$m
+  v <- v[1,1]
+  if (v>=self$comp){
+    v <- v-self$sub
+  }
+  self$tunnel$capture(v)
+  return (v)
+}
+
+#################################################################################
+#                                                                               #
+# SignedForwardReferenceCodec                                                   #
+#                                                                               #
+#################################################################################
+
+
+decode.SignedForwardReferenceCodec(self,rbs){
+  v <- as.numeric(rbs$read(self$l)) %*% self$m
+  v <- v[1,1]
+  if (v>=self$comp){
+    v <- v-self$sub
+  }
+  self$tunnel$capture(v)
+  return (v)
 }
 
 #################################################################################
