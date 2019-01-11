@@ -1,7 +1,7 @@
-Package: PackUnpackR
+Package: packUnpacker
 Title: Pack and Unpack binary data files
 Version: 0.0.0.9000
-Authors@R: person("Bruce", "Schardt", email = "bruce.schardt@gmail.com", role = c("aut", "cre"))
+Authors@R: person("Bruce", "Schardt", email = "schardt.bruce.curtis@gmail.com", role = c("aut", "cre"))
 Description: Uses a format descriptor to pack and unpack binary data. The grammer ofthe format descriptor
   is more extensive then that found in other languages.
 Depends: R (>= 3.4.4)
