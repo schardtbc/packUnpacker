@@ -1,12 +1,12 @@
 # PackUnpackR/core.R
 #
 # Author: Bruce C. Schardt
-#  email: bruce.schardt@gmail.com
+#  email: schardt.bruce.curtis@gmail.com
 #
-# git clone https://github.com/bruce-schardt/PackUnpackR.git
+# git clone https://github.com/schardtbc/packUnpacker
 # copyright 2018
 
-# PackUnpackR
+# packUnpacker
 # R package to Unpack(parse) a binary file based on a file format definition
 # example format:  format = 'x8Sx38LL>nLL>aLLLBBBBBccc8c8c8c8c8c8c20bbo<a[OptiRecordv1]<n'
 
