@@ -1,2 +1,4 @@
 # PackUnpackR
-a pack unpack package for R 
+
+a buffer (raw byte stream) pack unpack package for R 
+
